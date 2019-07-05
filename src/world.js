@@ -1,5 +1,4 @@
 const Vec3 = require('vec3')
-let Anvil
 const fifo = require('fifo')
 const EventEmitter = require('events').EventEmitter
 const once = require('event-promise')
@@ -13,14 +12,14 @@ function posInChunk (pos) {
 }
 
 class World extends EventEmitter {
-  constructor (chunkGenerator, regionFolder, savingInterval = 100) {
+  constructor (chunkGenerator, regionFolder, savingInterval = 100, versioned) {
     super()
     this.savingQueue = fifo()
     this.finishedSaving = Promise.resolve()
     this.columns = {}
     this.columnsArray = []
     this.chunkGenerator = chunkGenerator
-    this.anvil = regionFolder ? new Anvil(regionFolder) : null
+    this.anvil = regionFolder ? new versioned.Anvil(regionFolder) : null
     this.savingInterval = savingInterval
     if (regionFolder && savingInterval !== 0) this.startSaving()
   }
@@ -184,10 +183,21 @@ class World extends EventEmitter {
     this.saveAt(pos)
   };
 }
+const versionCache = {};
 
 function loader (mcVersion) {
-  Anvil = require('prismarine-provider-anvil').Anvil(mcVersion)
-  return World
+  if (versionCache[mcVersion] === undefined) {
+    versionCache[mcVersion] = class extends World {
+      constructor(chunkGenerator, regionFolder, savingInterval) {
+        let versioned = {
+            Anvil: require('prismarine-provider-anvil').Anvil(mcVersion)
+        };
+        super(chunkGenerator, regionFolder, savingInterval, versioned);
+      }
+    };
+    Object.defineProperty (versionCache[mcVersion], "name", {value: `World_${mcVersion.replace(/\./g, "_")}`});
+  }
+  return versionCache[mcVersion];
 }
 
 module.exports = loader
